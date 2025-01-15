@@ -1,0 +1,27 @@
+name: Weekly Update Merge Request Config
+
+on:
+  schedule:
+    # Cron format: minute hour day-of-month month day-of-week
+    - cron: '0 0 * * MON'  # Every Monday at midnight UTC
+
+jobs:
+  update-mrconfig:
+    runs-on: ubuntu-latest
+    env:
+      AUTHOR_NAME: 'default_name'
+      AUTHOR_EMAIL: 'default_email@example.com'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Git
+          git remote rm origin
+      - name: Set execute permission
+        run: chmod +x ./bin/update-mrconfig
+
+      - name: Update MR Config
+        run: ./bin/update-mrconfig
+      
+      - name: Update MR Config
+        run: ./bin/update-mrconfig

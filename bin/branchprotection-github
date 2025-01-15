@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+#
+# Will (re)set branch protection to allow developers to push and merge on GitHub.com
+#
+# Usage: $ ./bin/branchprotection-github [--all|<project1>] [<project2>]
+#   Without argument, will default to: '--all'
+#
+# Example:
+#   $ ./bin/branchprotection-github
+#   $ ./bin/branchprotection-github --all
+#   $ ./bin/branchprotection-github project1 project2
+#
+# Requirements:
+#   # apt update && apt install --yes --no-install-recommends devscripts libgithub-api-v4-perl
+#   - GitHub API token: https://github.com/settings/tokens
+#
+
+## Quit on error
+set -e
+
+branch="khulnasoft/master"
+packages="${*:---all}"
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+source .github-token 2>/dev/null \
+  || true
+
+if [ -z "${SALSA_TOKEN}" ]; then
+  echo "[-] ERROR: You are missing: $( pwd )/.github-token" >&2
+  echo "    Create: https://github.com/settings/tokens" >&2
+  echo "    Afterwards: echo \"SALSA_TOKEN='XXX'\" > $( pwd )/.github-token" >&2
+  exit 1
+fi
+
+if [ ! -e ./salsa.d/auth.conf ]; then
+  echo "[-] ERROR: You don't seem to be in the correct directory" >&2
+  echo "    Run this tool from the top-level directory as: ./bin/branchprotection-github" >&2
+  exit 1
+fi
+
+# Check if salsa is installed
+if ! command -v salsa 1>/dev/null 2>&1; then
+  echo "[-] Please run: $ sudo apt install devscripts" >&2
+  exit 1
+fi
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+if [ "${packages}" = "--all" ]; then
+  ## group-id 5034987 = https://github.com/khulnasoft/packages
+  ## ls has changed its default behaviour before, to include "archived" & "non-archived" repos
+  ## Removing WIP as its Kali's way of tracking packages which are Work In Progress queue
+  echo "[i] Fetching all projects"
+  packages=$( salsa \
+                   --conf-file ./salsa.d/auth.conf \
+                   --group-id 5034987 \
+                   --no-archived \
+                   ls \
+              | awk '/Name:/ {print $2}' \
+              | grep -v "^WIP$" \
+              | sort )
+
+  ## Summary is always nice
+  echo "[i] Total: $( echo "${packages}" | wc -l ) projects"
+fi
+
+for package in ${packages}; do
+  echo "[>] Setting branch protection for ${package} ~ https://github.com/khulnasoft/packages/${package}"
+
+  ## no  = Unprotect
+  ## d d = Protect (merge and push for developers)
+  ## group-id 5034987 = https://github.com/khulnasoft/packages
+  for action in "no" "d d"; do
+    salsa \
+      --conf-file ./salsa.d/auth.conf \
+      --verbose \
+      --group-id 5034987 \
+      protect_branch \
+      ${package} \
+      "${branch}" ${action}
+  done
+  echo ""
+done
+
+echo "[+] Done"
+
+# Variables
+REPO_OWNER="your-username"
+REPO_NAME="your-repo"
+BRANCH="main"
+GITHUB_TOKEN="your-github-token"
+
+# API endpoint
+API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/branches/${BRANCH}/protection"
+
+# Branch protection rules payload
+PAYLOAD=$(cat <<EOF
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": []
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": true,
+    "required_approving_review_count": 1
+  },
+  "restrictions": null
+}
+EOF
+)
+
+# Set branch protection rules
+curl -X PUT -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3+json" -d "${PAYLOAD}" "${API_URL}"

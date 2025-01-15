@@ -1,0 +1,15 @@
+name: Daily Branch Protection for GitHub Repositories
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Every day at midnight UTC
+
+jobs:
+  branchprotection-github:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use pre-built Docker image
+        uses: docker://your-docker-image:latest
+      
+      - name: Run Branch Protection
+        run: ./bin/branchprotection-github --all

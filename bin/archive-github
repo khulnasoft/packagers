@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#
+# Archived project(s) (aka package repositories) on GitHub.com
+#   _Open MR one day for devscripts salsa_
+#
+# Usage: $ ./bin/archive-github <project1> [<project2>]
+#
+# Example:
+#   $ ./bin/archive-github project1 project2
+#   $ SALSA_TOKEN=xxx ./bin/archive-github project
+#
+# Requirements:
+#   # apt-get update && apt-get install --yes --no-install-recommends curl ca-certificates
+#   - GitHub API token: https://github.com/-/profile/personal_access_tokens
+#
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+## Quit on error
+set -e
+#set -eo pipefail
+
+## DEBUG
+#set -x
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+packages="$@"
+GITHUB_TOKEN="${GITHUB_TOKEN:?You must set the GITHUB_TOKEN environment variable}"
+project_path=${1:-"./../packages"}
+archived_path=${2:-"./../archived"}
+archived_path="./archived"
+
+## Function to check if a repository is archived
+is_archived() {
+  local repo=$1
+  local owner=$(basename $(dirname "$repo"))
+  local name=$(basename "$repo")
+  local api_url="https://api.github.com/repos/${owner}/${name}"
+
+  local archived=$(curl -s --fail -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3+json" "${api_url}" | jq -r .archived)
+  [ "$archived" == "true" ]
+}
+
+## Create archived path if it doesn't exist
+mkdir -p "$archived_path"
+
+## Move archived repositories
+for repo in "$project_path"/*; do
+  if [ -d "$repo/.git" ]; then
+    if is_archived "$repo"; then
+      echo "Archiving $repo"
+      mv "$repo" "$archived_path"
+    fi
+  fi
+done
+#exit 0
+

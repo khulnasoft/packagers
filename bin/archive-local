@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+#
+# Move any locally cloned project(s) (aka package repositories) which have been remotely archived on GitHub.com
+#
+# Usage: $ ./bin/archive-local [<project-path>] [<archived-path>]
+#   Without argument, will default to:
+#     - project-path: ./../packages/
+#     - archived-path: ./../archived/
+#
+# Example:
+#   $ ./bin/archive-local
+#   $ yes | ./bin/archive-local ~/khulnasoft/packages ~/khulnasoft/packages/archived
+#
+# Requirements:
+#   $ ./bin/clone-github
+#
+
+## Quit on error
+set -e
+
+## Base folder, to locate mrconfig
+repo_dir=$( dirname "$0" )/..
+
+## Where the cloned projects are
+project_path=${1:-"$repo_dir/../packages"}
+archived_path=${2:-"$repo_dir/../archived"}
+
+## GitHub API token
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+## Check before doing action
+confirm_to_continue() {
+  read -p "[?] Proceed? [Y/n] " reply
+  case "${reply}" in
+    [Yy]|"")
+      ;;
+    *)
+      echo "[-] Cancelling operation" >&2
+      exit 0
+      ;;
+  esac
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+## Find absolute path
+project_path=$( realpath -m "${project_path}" )
+archived_path=$( realpath -m "${archived_path}" )
+
+## Check for myrepos config
+if [ ! -e "${project_path}/.mrconfig" ]; then
+  echo "[-] Unable to locate: ${project_path}/.mrconfig" >&2
+  echo "    Please run: $ ./bin/clone-github ${project_path}" >&2
+  exit 1
+fi
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+## Create archive location
+mkdir -pv "${archived_path}/"
+
+## Feedback about action
+echo "[>] Comparing '${project_path}/.mrconfig' with 'ls ${project_path}/*' to see if any projects which may have been archived"
+
+## Not usin#!/usr/bin/env bash
+#
+# Move any locally cloned project(s) (aka package repositories) which have been remotely archived on GitHub.com
+#
+# Usage: $ ./bin/archive-local [<project-path>] [<archived-path>]
+#   Without argument, will default to:
+#     - project-path: ./../packages/
+#     - archived-path: ./../archived/
+#
+# Example:
+#   $ ./bin/archive-local
+#   $ yes | ./bin/archive-local ~/khulnasoft/packages ~/khulnasoft/packages/archived
+#
+# Requirements:
+#   $ ./bin/clone-github
+#
+
+## Quit on error
+set -e
+
+## Base folder, to locate mrconfig
+repo_dir=$( dirname "$0" )/..
+
+## Where the cloned projects are
+project_path=${1:-"$repo_dir/../packages"}
+archived_path=${2:-"$repo_dir/../archived"}
+
+## GitHub API token
+GITHUB_TOKEN="your-github-token"
+
+## Function to check if a repository is archived
+is_archived() {
+  local repo=$1
+  local owner=$(basename $(dirname "$repo"))
+  local name=$(basename "$repo")
+  local api_url="https://api.github.com/repos/${owner}/${name}"
+
+  local archived=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3+json" "${api_url}" | jq -r .archived)
+  [ "$archived" == "true" ]
+}
+
+## Create archived path if it doesn't exist
+mkdir -p "$archived_path"
+
+## Move archived repositories
+for repo in "$project_path"/*; do
+  if [ -d "$repo/.git" ]; then
+    if is_archived "$repo"; then
+      echo "Archiving $repo"
+      mv "$repo" "$archived_path"
+    fi
+  fi
+doneg while loop, due to nested read
+## Spaces in path name will break loop (should not have any though)
+for package in $( ls -1 "${project_path}/" ); do
+  if ! grep -q "^\[${package}\]$" "${project_path}/.mrconfig"; then
+    echo "[>] Archive '${project_path}/${package}' to '${archived_path}/${package}'"
+    confirm_to_continue
+    mv -v "${project_path}/${package}" "${archived_path}/${package}"
+  fi
+done
+
+echo "[+] Done"
